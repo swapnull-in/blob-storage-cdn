@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Blob Storage & CDN — Blob Lab</title>
+<meta name="description" content="An interactive lab for blob storage & CDNs: presigned URLs, multipart upload, the 11-nines durability math, erasure coding, content-addressable storage, deletion & GC, hot partitions, and CDN caching." />
+<meta name="theme-color" content="#faf9f6" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0d0d13" media="(prefers-color-scheme: dark)" />
+<link rel="preload" href="fonts/space-grotesk-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+<link rel="preload" href="fonts/ibm-plex-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
+<style>
+  @font-face { font-family:"Space Grotesk"; font-style:normal; font-weight:500; font-display:swap; src:url(fonts/space-grotesk-latin-500-normal.woff2) format("woff2"); }
+  @font-face { font-family:"Space Grotesk"; font-style:normal; font-weight:600; font-display:swap; src:url(fonts/space-grotesk-latin-600-normal.woff2) format("woff2"); }
+  @font-face { font-family:"Space Grotesk"; font-style:normal; font-weight:700; font-display:swap; src:url(fonts/space-grotesk-latin-700-normal.woff2) format("woff2"); }
+  @font-face { font-family:"IBM Plex Sans"; font-style:normal; font-weight:400; font-display:swap; src:url(fonts/ibm-plex-sans-latin-400-normal.woff2) format("woff2"); }
+  @font-face { font-family:"IBM Plex Sans"; font-style:normal; font-weight:500; font-display:swap; src:url(fonts/ibm-plex-sans-latin-500-normal.woff2) format("woff2"); }
+  @font-face { font-family:"IBM Plex Sans"; font-style:normal; font-weight:600; font-display:swap; src:url(fonts/ibm-plex-sans-latin-600-normal.woff2) format("woff2"); }
+  @font-face { font-family:"IBM Plex Mono"; font-style:normal; font-weight:400; font-display:swap; src:url(fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2"); }
+  @font-face { font-family:"IBM Plex Mono"; font-style:normal; font-weight:500; font-display:swap; src:url(fonts/ibm-plex-mono-latin-500-normal.woff2) format("woff2"); }
+  :root {
+    --bg:#faf9f6; --panel:#ffffff; --panel-2:#f4f2ec; --sidebar-bg:#f4f2ec; --hover:#ebe9e1;
+    --ink:#191a20; --muted:#6c6d78; --line:#e7e3da;
+    --accent:#c2410c; --accent-soft:#fbe9df; --amber:#b96608; --amber-soft:#fbeed6;
+    --good:#0f9d6a; --good-soft:#e0f2ea; --warn:#b96608; --warn-soft:#fbeed6; --bad:#dd4650; --bad-soft:#fbe4e6; --info:#2f6db0;
+    --shadow:0 1px 2px rgba(24,20,40,.04), 0 10px 30px -16px rgba(24,20,40,.18);
+    --mono:"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans:"IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --display:"Space Grotesk", var(--sans);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#0d0d13; --panel:#16161e; --panel-2:#1d1d27; --sidebar-bg:#0a0a10; --hover:#20202c;
+      --ink:#ecebf2; --muted:#9698a6; --line:#282833;
+      --accent:#f59d6b; --accent-soft:#2e1a10; --amber:#f0b45a; --amber-soft:#2a2216;
+      --good:#40d98c; --good-soft:#12261e; --warn:#f0b45a; --warn-soft:#2a2216; --bad:#ff6b72; --bad-soft:#2a141a; --info:#6ea8e0;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 14px 34px -18px rgba(0,0,0,.7);
+    }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; }
+  body { background:var(--bg); color:var(--ink); font-family:var(--sans); line-height:1.55; -webkit-font-smoothing:antialiased; }
+  code, .mono { font-variant-numeric:tabular-nums; }
+  .app { display:flex; align-items:flex-start; min-height:100vh; }
+  .sidebar { position:sticky; top:0; height:100vh; width:272px; flex:none; z-index:40; display:flex; flex-direction:column; overflow-y:auto; padding:20px 14px 16px; background:var(--sidebar-bg); border-right:1px solid var(--line); }
+  .brand { display:flex; align-items:center; gap:11px; padding:4px 10px 16px; margin-bottom:6px; border-bottom:1px solid var(--line); }
+  .glyph { width:32px; height:32px; flex:none; border-radius:9px; background:var(--accent); display:grid; place-items:center; color:#fff; font-family:var(--mono); font-size:17px; box-shadow:0 5px 14px -5px color-mix(in srgb, var(--accent) 60%, transparent); }
+  .brand .wm { display:flex; flex-direction:column; line-height:1.25; }
+  .brand .wm b { font-family:var(--display); font-weight:600; font-size:14.5px; letter-spacing:-.01em; }
+  .brand .wm span { font-family:var(--mono); font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  nav.nav { display:flex; flex-direction:column; }
+  .nav-group { margin-top:13px; }
+  .nav-group-label { font-family:var(--mono); font-size:9.5px; letter-spacing:.13em; text-transform:uppercase; color:var(--muted); padding:0 11px 6px; }
+  .nav-item { display:flex; align-items:center; gap:11px; width:100%; text-align:left; cursor:pointer; background:none; border:none; font-family:var(--sans); font-size:13.5px; color:var(--muted); padding:7px 11px; border-radius:8px; transition:.12s; line-height:1.3; }
+  .nav-item .n { font-family:var(--mono); font-size:11px; color:color-mix(in srgb, var(--muted) 75%, transparent); min-width:15px; text-align:right; }
+  .nav-item:hover { background:var(--hover); color:var(--ink); }
+  .nav-item.active { background:var(--accent-soft); color:var(--accent); font-weight:500; }
+  .nav-item.active .n { color:var(--accent); }
+  .side-foot { margin-top:auto; padding:15px 11px 2px; font-family:var(--mono); font-size:11px; line-height:1.7; color:var(--muted); }
+  .side-foot a { color:var(--muted); text-decoration:none; border-bottom:1px solid var(--line); }
+  .side-foot a:hover { color:var(--accent); border-color:var(--accent); }
+  .main { flex:1; min-width:0; padding:42px clamp(24px,4vw,60px) 100px; }
+  .main-inner { max-width:960px; margin:0 auto; }
+  .topbar, .backdrop { display:none; }
+  .hero-eyebrow { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); margin:0 0 14px; }
+  .hero h1 { font-family:var(--display); font-weight:600; font-size:clamp(31px,4.6vw,47px); margin:0 0 16px; letter-spacing:-.026em; line-height:1.03; max-width:16ch; }
+  .hero h1 em { font-style:normal; color:var(--accent); }
+  .hero p { color:var(--muted); margin:0; max-width:62ch; font-size:16.5px; line-height:1.6; }
+  .hero p strong { color:var(--ink); font-weight:600; }
+  .levers { display:grid; grid-template-columns:repeat(auto-fill, minmax(210px,1fr)); gap:12px; margin:30px 0 4px; }
+  .lever { background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:15px 16px; box-shadow:var(--shadow); }
+  .lever b { font-family:var(--display); font-weight:600; font-size:14px; display:block; margin-bottom:4px; }
+  .lever span { font-size:12.5px; color:var(--muted); line-height:1.5; }
+  .overview-hint { font-size:14.5px; color:var(--muted); margin:24px 0 0; line-height:1.6; max-width:66ch; }
+  .overview-hint b { color:var(--ink); font-weight:600; }
+  section.phase { display:none; }
+  section.phase.active { display:block; animation:fade .22s ease; }
+  @keyframes fade { from { opacity:0; transform:translateY(5px); } to { opacity:1; } }
+  .phase h2 { font-family:var(--display); font-weight:600; font-size:25px; margin:0 0 6px; letter-spacing:-.02em; }
+  .phase .lede { color:var(--muted); margin:0 0 20px; max-width:76ch; font-size:15.5px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:20px 22px; margin-bottom:16px; box-shadow:var(--shadow); }
+  .lab { display:grid; grid-template-columns:244px 1fr; gap:22px; align-items:start; }
+  @media (max-width:760px){ .lab { grid-template-columns:1fr; } }
+  .controls { display:flex; flex-direction:column; gap:11px; }
+  .stage { min-width:0; display:flex; flex-direction:column; gap:14px; }
+  label.fld { display:block; font-family:var(--mono); font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+  input[type=range] { width:100%; accent-color:var(--accent); height:4px; }
+  .slabel { display:flex; justify-content:space-between; align-items:baseline; font-family:var(--mono); font-size:12px; color:var(--muted); margin-bottom:4px; }
+  .slabel b { color:var(--ink); font-size:14px; }
+  button.act { font-family:var(--sans); font-size:13px; background:var(--accent); color:#fff; border:none; padding:9px 14px; border-radius:9px; cursor:pointer; font-weight:500; text-align:left; box-shadow:0 4px 12px -5px color-mix(in srgb, var(--accent) 60%, transparent); transition:.14s; }
+  button.act:hover { filter:brightness(1.06); }
+  button.ghost { font-family:var(--sans); font-size:13px; background:var(--panel-2); color:var(--ink); border:1px solid var(--line); padding:8px 12px; border-radius:9px; cursor:pointer; text-align:left; }
+  button.ghost:hover { border-color:var(--accent); }
+  button.ghost.sel { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+  .seg { display:flex; gap:6px; flex-wrap:wrap; } .seg button { flex:1 1 auto; }
+  .toggle { display:flex; align-items:center; gap:10px; font-size:13.5px; color:var(--ink); cursor:pointer; user-select:none; }
+  .toggle input { width:16px; height:16px; accent-color:var(--accent); }
+  .nav-item:focus-visible, input:focus-visible, button:focus-visible, a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .verdict { font-family:var(--mono); font-size:13px; border-radius:9px; padding:11px 13px; border:1px solid var(--line); display:flex; gap:10px; align-items:baseline; background:var(--panel-2); }
+  .verdict .dot { width:9px; height:9px; border-radius:50%; flex:none; translate:0 2px; background:var(--muted); }
+  .verdict.ok { background:var(--good-soft); border-color:color-mix(in srgb,var(--good) 40%,transparent); } .verdict.ok .dot { background:var(--good); }
+  .verdict.bad { background:var(--bad-soft); border-color:color-mix(in srgb,var(--bad) 40%,transparent); } .verdict.bad .dot { background:var(--bad); }
+  .verdict.warn { background:var(--warn-soft); border-color:color-mix(in srgb,var(--warn) 40%,transparent); } .verdict.warn .dot { background:var(--warn); }
+  .proof { font-size:13px; color:var(--muted); border-left:3px solid var(--accent); padding:8px 0 8px 13px; margin-top:2px; background:linear-gradient(90deg, var(--accent-soft), transparent 80%); border-radius:0 8px 8px 0; }
+  .proof b { color:var(--ink); }
+  code { font-family:var(--mono); background:var(--accent-soft); color:var(--accent); padding:1px 5px; border-radius:5px; font-size:.88em; }
+  .big { font-family:var(--mono); font-size:23px; font-variant-numeric:tabular-nums; }
+  .big small { font-size:11px; color:var(--muted); font-family:var(--mono); text-transform:uppercase; letter-spacing:.06em; display:block; }
+  .krow { display:flex; gap:10px; flex-wrap:wrap; }
+  .kcard { flex:1 1 120px; border:1px solid var(--line); border-radius:9px; padding:9px 12px; background:var(--panel-2); }
+  .kcard h4 { margin:0 0 5px; font-family:var(--mono); font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:500; }
+  table.cmp { width:100%; border-collapse:collapse; font-family:var(--mono); font-size:12.5px; }
+  table.cmp th, table.cmp td { text-align:right; padding:6px 9px; border-bottom:1px solid var(--line); }
+  table.cmp th:first-child, table.cmp td:first-child { text-align:left; }
+  table.cmp th { color:var(--muted); font-weight:500; font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; }
+  .log-list { font-family:var(--mono); font-size:12px; line-height:1.7; max-height:190px; overflow:auto; }
+  .flow { display:flex; gap:4px; flex-wrap:wrap; min-height:26px; }
+  .tok { font-family:var(--mono); font-size:12px; padding:4px 7px; border-radius:7px; border:1px solid var(--line); background:var(--panel); }
+  .tok.ok { border-color:var(--good); color:var(--good); background:var(--good-soft); }
+  .tok.bad { border-color:var(--bad); color:var(--bad); background:var(--bad-soft); }
+  @media (max-width:880px) {
+    .app { display:block; }
+    .topbar { display:flex; align-items:center; gap:11px; position:sticky; top:0; z-index:30; padding:11px 16px; background:color-mix(in srgb,var(--bg) 88%,transparent); backdrop-filter:saturate(1.5) blur(10px); border-bottom:1px solid var(--line); }
+    .topbar b { font-family:var(--display); font-weight:600; font-size:15.5px; }
+    .hamburger { margin-left:auto; display:grid; place-items:center; width:38px; height:38px; border:1px solid var(--line); border-radius:9px; background:var(--panel); color:var(--ink); cursor:pointer; font-family:var(--mono); font-size:17px; }
+    .sidebar { position:fixed; top:0; left:0; height:100dvh; width:286px; transform:translateX(-100%); transition:transform .22s ease; box-shadow:0 0 70px rgba(0,0,0,.28); }
+    .app.nav-open .sidebar { transform:none; }
+    .backdrop { display:block; position:fixed; inset:0; z-index:39; background:rgba(0,0,0,.42); opacity:0; pointer-events:none; transition:opacity .22s; }
+    .app.nav-open .backdrop { opacity:1; pointer-events:auto; }
+    .main { padding:22px 18px 84px; }
+    .lab { grid-template-columns:1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior:auto !important; animation:none !important; transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><span class="glyph">▣</span><span class="wm"><b>Blob Lab</b><span>Blob storage &amp; CDN</span></span></div>
+    <nav class="nav" id="nav" aria-label="Lessons"></nav>
+    <div class="side-foot">Every panel is also a runnable <code style="font-size:10px">npm run phaseN</code>.<br /><a href="https://github.com/swapnull-in/blob-storage-cdn" target="_blank" rel="noopener">View source ↗</a> · <a href="https://system-design-labs.pages.dev" target="_blank" rel="noopener">all 10 labs ↗</a></div>
+  </aside>
+  <div class="backdrop" id="backdrop"></div>
+  <main class="main">
+    <div class="topbar"><span class="glyph">▣</span><b>Blob Lab</b><button class="hamburger" id="hamburger" aria-label="Toggle navigation">≡</button></div>
+    <div class="main-inner">
+
+    <!-- OVERVIEW -->
+    <section class="phase" data-tab="Overview">
+      <div class="hero">
+        <p class="hero-eyebrow">Blob storage · Blob Lab</p>
+        <h1>Big bytes never touch <em>your</em> servers.</h1>
+        <p>The whole pattern in one line: <strong>metadata in a DB, bytes in object storage, presigned URLs both
+          ways</strong>. The interesting engineering is durability economics — how eleven nines is <em>manufactured</em>
+          (failure domains + repair speed, not copies), what erasure coding buys over replication, and why the surprise
+          line on the bill is always <strong>egress</strong>.</p>
+      </div>
+      <div class="levers">
+        <div class="lever"><b>The pattern</b><span>Presigned URLs, multipart resume, upload-then-commit.</span></div>
+        <div class="lever"><b>Durability economics</b><span>11 nines derived; erasure coding vs replication.</span></div>
+        <div class="lever"><b>Lifecycle</b><span>Content addressing, tombstones → GC → compaction.</span></div>
+        <div class="lever"><b>Delivery</b><span>Hot prefixes, CDN caching, versioned invalidation, egress.</span></div>
+      </div>
+      <p class="overview-hint"><b>Pick a lesson in the sidebar.</b> The line to carry into the room: <em>my API hands out
+        capabilities, not bytes — durability is a race between failure rate and repair rate, and deletion is a state
+        machine, not an operation.</em></p>
+    </section>
+
+    <!-- 1 · PRESIGNED -->
+    <section class="phase" data-tab="1 · Presigned URLs">
+      <h2>Presigned URLs — pointers, not bytes</h2>
+      <p class="lede">Proxying uploads through your API turns it into a file server. Instead the app server signs a
+        short-lived <strong>capability URL</strong> (HMAC over method+key+expiry); the client talks to the object store
+        directly. The app only ever writes a ~200-byte pointer row.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div class="seg"><button class="ghost sel" id="ps-proxy">proxy through API</button><button class="ghost" id="ps-signed">presigned direct</button></div>
+          <button class="act" id="ps-run">⬆ 50 users upload 2 GB videos</button>
+          <button class="ghost" id="ps-tamper">🕵 Attacker tampers with a URL</button>
+          <div class="verdict" id="ps-verdict"><span class="dot"></span><span id="ps-vtext">Compare where the bytes flow.</span></div>
+        </div>
+        <div class="stage">
+          <div class="krow">
+            <div class="kcard"><h4>bytes through your fleet</h4><div class="big" id="ps-bytes">—</div></div>
+            <div class="kcard"><h4>app server writes</h4><div class="big" id="ps-meta" style="font-size:16px">—</div></div>
+          </div>
+          <p class="proof"><b>The proof:</b> proxied, 50 × 2 GB in-and-out = <b>~400 GB in flight through your fleet</b> —
+            your API is now a file proxy. Presigned, the same uploads move <b>0 bytes</b> through you; the store verifies
+            the signature and expiry itself (a tampered key or a 61-second-old 60s URL is <b>DENIED</b>). Commit order
+            matters: blob first, then metadata — a crash in between leaves an invisible orphan the GC sweep reclaims, not
+            a user-visible dangling pointer.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 2 · MULTIPART -->
+    <section class="phase" data-tab="2 · Multipart upload">
+      <h2>Multipart upload — resume, don't restart</h2>
+      <p class="lede">A 5 GB single PUT that dies at 80% restarts from byte zero. Multipart splits it into parts (each
+        with an ETag), so a failure costs one part; <code>ListParts</code> tells the resuming client what survived, and
+        <code>Complete</code> — the manifest commit — is the atomic point where parts become an object.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div class="seg"><button class="ghost sel" id="mp-single">single 5 GB PUT</button><button class="ghost" id="mp-multi">multipart (40 × 128 MB)</button></div>
+          <button class="act" id="mp-run">⬆ Upload — connection dies at 80%</button>
+          <div class="verdict" id="mp-verdict"><span class="dot"></span><span id="mp-vtext">Kill the connection at 80% and compare recovery.</span></div>
+        </div>
+        <div class="stage">
+          <div class="flow" id="mp-parts"></div>
+          <div class="krow">
+            <div class="kcard"><h4>total bytes sent</h4><div class="big" id="mp-sent">—</div></div>
+            <div class="kcard"><h4>parallel speedup</h4><div class="big" id="mp-par">8×</div></div>
+          </div>
+          <p class="proof"><b>The proof:</b> the single PUT sends <b>9,216 MB</b> for a 5,120 MB file (the failed 4 GB is
+            pure waste). Multipart re-uploads only the one lost part: <b>5,248 MB total — 3,968 MB saved</b>. Before
+            <code>Complete</code>, a GET returns 404 (parts ≠ object); the manifest commit is the consistency point. And
+            abandoned parts bill invisibly until an <code>AbortIncompleteMultipartUpload</code> lifecycle rule sweeps
+            them.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 3 · DURABILITY -->
+    <section class="phase" data-tab="3 · Durability math">
+      <h2>Eleven nines — manufactured, not bought</h2>
+      <p class="lede">Copies alone don't give durability. Data is lost only when <em>every</em> copy dies <em>before
+        repair completes</em> — so durability is a race between the failure rate and the <strong>repair rate</strong>,
+        multiplied by the <strong>independence</strong> of failure domains.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div class="seg"><button class="ghost sel" id="du-1">1 copy</button><button class="ghost" id="du-slow">3 copies · 30-day repair</button><button class="ghost" id="du-fast">3 copies · 3-hour repair</button><button class="ghost" id="du-corr">3 copies · same rack</button></div>
+          <div class="verdict" id="du-verdict"><span class="dot"></span><span id="du-vtext">Pick a configuration.</span></div>
+        </div>
+        <div class="stage">
+          <div class="krow">
+            <div class="kcard"><h4>annual loss probability</h4><div class="big" id="du-p">—</div></div>
+            <div class="kcard"><h4>nines</h4><div class="big" id="du-n">—</div></div>
+          </div>
+          <p class="proof"><b>The proof:</b> one copy loses ≈ AFR = 2%/yr (1.7 nines — losing 1 in 50 objects is not a
+            product). Three copies with a 30-<em>day</em> repair window: 1.5e-7. Shrink repair to 3 <em>hours</em> and the
+            same three copies hit <b>2.8e-12 — eleven-plus nines</b> — repair speed did that, not more copies. Put the
+            three copies in one rack and correlation collapses it back toward the AFR: independence is the third
+            factor.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 4 · ERASURE -->
+    <section class="phase" data-tab="4 · Erasure coding">
+      <h2>Erasure coding vs 3× replication</h2>
+      <p class="lede">Split a blob into <strong>k=4 data + m=2 parity</strong> shards: lose <em>any two</em> and
+        reconstruct exactly — the same 2-loss tolerance as three full copies at <strong>half the bytes</strong>. The
+        price: repairs read k shards and degraded reads must reconstruct.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <button class="act" id="ec-lose">💥 Lose 2 random shards → reconstruct</button>
+          <button class="ghost" id="ec-lose3">💥💥 Lose 3 shards</button>
+          <div class="verdict" id="ec-verdict"><span class="dot"></span><span id="ec-vtext">The object lives as 6 shards (4 data + 2 parity).</span></div>
+        </div>
+        <div class="stage">
+          <div class="flow" id="ec-shards"></div>
+          <table class="cmp"><thead><tr><th>scheme</th><th>overhead</th><th>tolerates</th><th>1 PB costs</th></tr></thead>
+            <tbody><tr><td>3× replication</td><td>3.0×</td><td>2 losses</td><td>$60,000/mo</td></tr>
+            <tr style="color:var(--accent)"><td>EC (4+2)</td><td>1.5×</td><td>2 losses</td><td>$30,000/mo</td></tr></tbody></table>
+          <p class="proof"><b>The proof:</b> all 15 possible 2-shard losses reconstruct byte-identically; a third loss is
+            unrecoverable (m=2 tolerates exactly 2). Same protection, <b>half the storage bill</b> — which is why cold
+            tiers are erasure-coded while hot tiers stay replicated: replication's cheap reads and 1-shard repairs are
+            worth the bytes when the data is busy.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 5 · CAS -->
+    <section class="phase" data-tab="5 · Content-addressable">
+      <h2>Content-addressable storage — the key is the hash</h2>
+      <p class="lede">Key every blob by <code>sha256(content)</code>: identical content → identical address → stored
+        <strong>once</strong>. Every read self-verifies (a flipped bit changes the hash), and "editing" writes a new
+        address — immutability by construction, at the price of refcounted GC.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <button class="act" id="ca-up">⬆ 1,000 users upload the same meme</button>
+          <button class="ghost" id="ca-flip">⚡ Flip one bit on disk, then read</button>
+          <button class="ghost" id="ca-del">🗑 All 1,000 delete, one by one</button>
+          <div class="verdict" id="ca-verdict"><span class="dot"></span><span id="ca-vtext">Upload, corrupt, delete — watch the address do the work.</span></div>
+        </div>
+        <div class="stage">
+          <div class="krow">
+            <div class="kcard"><h4>blobs stored</h4><div class="big" id="ca-blobs">—</div></div>
+            <div class="kcard"><h4>refcount</h4><div class="big" id="ca-ref">—</div></div>
+            <div class="kcard"><h4>bytes saved</h4><div class="big" id="ca-saved" style="font-size:18px">—</div></div>
+          </div>
+          <p class="proof"><b>The proof:</b> 1,000 uploads → <b>1 physical write</b>, 1,000 pointers, 99.9% of the bytes
+            saved. The flipped bit makes the re-hash disagree with the address — <b>corruption detected</b>, repair from
+            a replica, no silent bad bytes. Deletes only decrement the refcount; the blob's bytes are reclaimed exactly
+            when it hits zero.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 6 · DELETION -->
+    <section class="phase" data-tab="6 · Deletion &amp; GC">
+      <h2>Deletion is a state machine</h2>
+      <p class="lede">Synchronously deleting from every replica, CDN, and backup is slow and partial-failure-prone (one
+        timeout = a half-deleted blob). The real pipeline: <strong>tombstone</strong> (one atomic row, user sees 404 in
+        ~2 ms) → <strong>grace window</strong> (undelete works) → <strong>async GC</strong> → <strong>compaction</strong>
+        reclaims the container space.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <button class="act" id="dg-del">🗑 Delete v1.mp4 (30 MB)</button>
+          <button class="ghost" id="dg-undo">↩ Undelete (day 3, in grace)</button>
+          <button class="ghost" id="dg-gc">⏩ Day 10 — GC + compaction</button>
+          <button class="ghost" id="dg-reset">↺ Reset</button>
+          <div class="verdict" id="dg-verdict"><span class="dot"></span><span id="dg-vtext">Bucket holds 83 MB across 2 container files.</span></div>
+        </div>
+        <div class="stage">
+          <div class="log-list" id="dg-log">—</div>
+          <p class="proof"><b>The proof:</b> the tombstone is one ~2 ms metadata write — the user's 404 is immediate while
+            disk usage is unchanged. Inside the 7-day grace window undelete is free. The day-10 GC frees tombstoned bytes
+            and compaction rewrites the 71%-dead container from 40 MB to 11 MB. Lifecycle policies (age → cold tier →
+            expire) are the same machinery pointed at the bill.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 7 · HOT PARTITION -->
+    <section class="phase" data-tab="7 · Hot partitions">
+      <h2>Your key naming is your load distribution</h2>
+      <p class="lede">Object stores partition by <strong>key prefix</strong> and rate-limit each partition (~3,500 PUT/s).
+        Timestamp-led keys (<code>logs/2026-08-17/…</code>) funnel every write to one partition; a hashed prefix spreads
+        the same traffic flat.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <div class="seg"><button class="ghost sel" id="hp-ts">logs/2026-08-17/…</button><button class="ghost" id="hp-hash">logs/&lt;hash%16&gt;/…</button></div>
+          <button class="act" id="hp-run">▶ 12,000 writes/sec arrive</button>
+          <div class="verdict" id="hp-verdict"><span class="dot"></span><span id="hp-vtext">Pick a key scheme and open the firehose.</span></div>
+        </div>
+        <div class="stage">
+          <div class="krow">
+            <div class="kcard"><h4>served</h4><div class="big" id="hp-ok" style="color:var(--good)">—</div></div>
+            <div class="kcard"><h4>503 SlowDown</h4><div class="big" id="hp-503" style="color:var(--bad)">—</div></div>
+          </div>
+          <p class="proof"><b>The proof:</b> timestamp keys → one partition carries everything: 3,500 served,
+            <b>8,500 × 503</b> (71% rejected). Hash-prefixed → 16 partitions × ~750 req each, <b>zero</b> throttling.
+            Auto-splitting eventually helps, but the ~3 minutes before it lands cost ~1.5M rejected requests — pre-spread
+            keys for known-spiky workloads. A hot <em>object</em> is different: replicate it, or front it with the CDN
+            (next lesson).</p>
+        </div>
+      </div></div>
+    </section>
+
+    <!-- 8 · CDN -->
+    <section class="phase" data-tab="8 · CDN">
+      <h2>CDN — cache the blob, version the URL, watch egress</h2>
+      <p class="lede">Put edge PoPs in front of the store: reads become "one miss per PoP", latency flattens worldwide,
+        and origin egress collapses. Invalidate by <strong>versioned/content-hash URLs</strong> (immutable forever), not
+        purges; sign private URLs so the edge itself rejects tampering.</p>
+      <div class="card"><div class="lab">
+        <div class="controls">
+          <label class="toggle"><input type="checkbox" id="cd-on" /> CDN in front (3 PoPs)</label>
+          <div class="seg"><button class="ghost sel" id="cd-purge">invalidate by purge</button><button class="ghost" id="cd-ver">versioned URLs</button></div>
+          <button class="act" id="cd-run">▶ 3,000 reads from 3 regions + a deploy</button>
+          <div class="verdict" id="cd-verdict"><span class="dot"></span><span id="cd-vtext">Run the trace with and without the CDN.</span></div>
+        </div>
+        <div class="stage">
+          <div class="krow">
+            <div class="kcard"><h4>ap-south latency</h4><div class="big" id="cd-lat">—</div></div>
+            <div class="kcard"><h4>origin egress</h4><div class="big" id="cd-eg" style="font-size:18px">—</div></div>
+            <div class="kcard"><h4>stale reads on deploy</h4><div class="big" id="cd-stale">—</div></div>
+          </div>
+          <p class="proof"><b>The proof:</b> the CDN takes ap-south from 205 ms to <b>16.5 ms</b> at a 99.5% hit ratio,
+            collapsing origin egress 293× (88.6 GB → 0.30 GB). On a deploy, purge-by-path leaves a window of stale reads
+            while the purge propagates; <b>versioned URLs serve zero stale reads and need zero purges</b> — the old name
+            just ages out. At 1 PB/month the bill: no CDN $94k; CDN at 90% edge-hit <b>$51k</b> — and a cold CDN (0% hit)
+            is <em>worse</em> than none, because you pay both meters.</p>
+        </div>
+      </div></div>
+    </section>
+
+    <div class="side-foot" style="margin-top:24px; padding-top:22px; border-top:1px solid var(--line); text-align:center">Browser port of the <code style="font-size:10px">src/phase*</code> scripts · same mechanics · MIT</div>
+    </div><!-- /main-inner -->
+  </main>
+</div>
+
+<script src="drill-data.js"></script>
+<script src="drill.js"></script>
+<script>
+const sections = [...document.querySelectorAll('section.phase')];
+const navEl = document.getElementById('nav'), appEl = document.getElementById('app');
+const tabButtons = [];
+const slug = s => s.dataset.tab.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const closeNav = () => appEl.classList.remove('nav-open');
+const TIER_OF = {
+  'drill':'Practice',
+  'overview':'Overview',
+  '1-presigned-urls':'The pattern','2-multipart-upload':'The pattern',
+  '3-durability-math':'Durability economics','4-erasure-coding':'Durability economics',
+  '5-content-addressable':'Lifecycle','6-deletion-gc':'Lifecycle',
+  '7-hot-partitions':'Delivery','8-cdn':'Delivery',
+};
+navEl.setAttribute('role','tablist'); navEl.setAttribute('aria-orientation','vertical');
+let curTier=null, groupEl=null;
+sections.forEach((sec,i)=>{ const id=slug(sec), tier=TIER_OF[id]||'More';
+  if(tier!==curTier){ groupEl=document.createElement('div'); groupEl.className='nav-group';
+    const h=document.createElement('div'); h.className='nav-group-label'; h.textContent=tier; groupEl.appendChild(h); navEl.appendChild(groupEl); curTier=tier; }
+  sec.id='panel-'+id; sec.setAttribute('role','tabpanel');
+  const parts=sec.dataset.tab.split('·').map(s=>s.trim());
+  const b=document.createElement('button'); b.className='nav-item'; b.setAttribute('role','tab');
+  b.innerHTML=`<span class="n">${parts.length>1?parts[0]:''}</span><span class="t">${parts.length>1?parts[1]:parts[0]}</span>`;
+  b.onclick=()=>{ activate(i,true); closeNav(); };
+  b.onkeydown=(e)=>{ const d=e.key==='ArrowDown'?1:e.key==='ArrowUp'?-1:e.key==='Home'?'first':e.key==='End'?'last':0; if(!d)return; e.preventDefault();
+    const n=d==='first'?0:d==='last'?sections.length-1:(i+d+sections.length)%sections.length; activate(n,true); tabButtons[n].focus(); };
+  tabButtons.push(b); groupEl.appendChild(b); });
+function activate(i,push){ sections.forEach((s,j)=>s.classList.toggle('active',i===j));
+  tabButtons.forEach((b,j)=>{ const on=i===j; b.classList.toggle('active',on); b.setAttribute('aria-selected',String(on)); b.tabIndex=on?0:-1; });
+  if(push && location.hash.slice(1)!==slug(sections[i])) history.replaceState(null,'','#'+slug(sections[i]));
+  window.scrollTo({ top:0, behavior: reduceMotion?'auto':'smooth' }); }
+function fromHash(){ const i=sections.findIndex(s=>slug(s)===location.hash.slice(1)); activate(i>=0?i:0,false); }
+addEventListener('hashchange',fromHash);
+document.getElementById('hamburger')?.addEventListener('click',()=>appEl.classList.toggle('nav-open'));
+document.getElementById('backdrop')?.addEventListener('click',closeNav);
+addEventListener('keydown',e=>{ if(e.key==='Escape') closeNav(); });
+
+const $=(s)=>document.querySelector(s);
+function verdict(sel,tsel,kind,text){ const v=$(sel); v.className='verdict '+kind; $(tsel).innerHTML=text; }
+
+/* ══ 1 · PRESIGNED ══ */
+(function(){
+  let mode='proxy';
+  [['ps-proxy','proxy'],['ps-signed','signed']].forEach(([id,m])=>{ $('#'+id).onclick=()=>{ mode=m; $('#ps-proxy').classList.toggle('sel',m==='proxy'); $('#ps-signed').classList.toggle('sel',m==='signed'); }; });
+  $('#ps-run').onclick=()=>{
+    if(mode==='proxy'){ $('#ps-bytes').textContent='~400 GB'; $('#ps-bytes').style.color='var(--bad)'; $('#ps-meta').textContent='50 rows + 400 GB proxied';
+      verdict('#ps-verdict','#ps-vtext','bad','50 × 2 GB in-and-out through YOUR fleet — the API is a file proxy, workers tied up for the whole transfer.'); }
+    else { $('#ps-bytes').textContent='0 MB'; $('#ps-bytes').style.color='var(--good)'; $('#ps-meta').textContent='50 pointer rows (~200 B each)';
+      verdict('#ps-verdict','#ps-vtext','ok','Clients PUT straight to the store with signed URLs — the app server only wrote <b>50 pointers</b>. Blob first, metadata second; orphans swept by GC.'); }
+  };
+  $('#ps-tamper').onclick=()=>{ verdict('#ps-verdict','#ps-vtext','ok','Attacker changed the key inside a signed URL → store recomputes the HMAC → <b>DENIED</b> (signature covers method+key+expiry). A 61 s-old 60 s URL: <b>DENIED — expired</b>.'); };
+})();
+
+/* ══ 2 · MULTIPART ══ */
+(function(){
+  let mode='single';
+  [['mp-single','single'],['mp-multi','multi']].forEach(([id,m])=>{ $('#'+id).onclick=()=>{ mode=m; $('#mp-single').classList.toggle('sel',m==='single'); $('#mp-multi').classList.toggle('sel',m==='multi'); }; });
+  $('#mp-run').onclick=()=>{
+    const flow=$('#mp-parts'); flow.innerHTML='';
+    if(mode==='single'){ flow.innerHTML='<span class="tok bad">attempt 1: 4,096 MB sent… 💥 reset → restart from byte 0</span><span class="tok ok">attempt 2: 5,120 MB → done</span>';
+      $('#mp-sent').textContent='9,216 MB'; $('#mp-sent').style.color='var(--bad)';
+      verdict('#mp-verdict','#mp-vtext','bad','The retry unit is the WHOLE FILE: 4,096 MB wasted (1.8× the file) because a single PUT cannot resume.'); }
+    else { let html=''; for(let i=1;i<=40;i++){ html+='<span class="tok '+(i===33?'bad':'ok')+'">'+(i===33?'💥33':i)+'</span>'; } flow.innerHTML=html;
+      $('#mp-sent').textContent='5,248 MB'; $('#mp-sent').style.color='var(--good)';
+      verdict('#mp-verdict','#mp-vtext','ok','Part 33 died; <code>ListParts</code> found 32 survivors → re-sent only the lost part. <b>3,968 MB saved.</b> GET is 404 until <code>Complete(manifest)</code> — the atomic commit point.'); }
+  };
+})();
+
+/* ══ 3 · DURABILITY ══ */
+(function(){
+  const CFG={ '1':['2.0e-2','1.7','bad','One copy: loss ≈ AFR = 2%/yr. Losing 1 in 50 objects a year is not a product.'],
+    'slow':['1.5e-7','6.8','warn','Three independent copies but a 30-DAY repair window — a second and third failure have a month to land. Good, not 11 nines.'],
+    'fast':['2.8e-12','11.6','ok','Same three copies, repair in 3 HOURS: the repair races the next failure and wins → <b>eleven-plus nines</b>. Repair speed did that, not more copies.'],
+    'corr':['~1.9e-2','1.7','bad','Three copies in ONE rack: the rack dies, all copies die together. Correlation collapses the math back to a single copy — independence is the third factor.'] };
+  [['du-1','1'],['du-slow','slow'],['du-fast','fast'],['du-corr','corr']].forEach(([id,k])=>{
+    $('#'+id).onclick=()=>{ ['du-1','du-slow','du-fast','du-corr'].forEach(x=>$('#'+x).classList.toggle('sel',x===id));
+      const c=CFG[k]; $('#du-p').textContent=c[0]; $('#du-n').textContent=c[1];
+      $('#du-p').style.color = c[2]==='ok'?'var(--good)': c[2]==='bad'?'var(--bad)':'var(--amber)';
+      verdict('#du-verdict','#du-vtext',c[2],c[3]); }; });
+  $('#du-1').click();
+})();
+
+/* ══ 4 · ERASURE ══ */
+(function(){
+  function paint(lost){ const names=['d1','d2','d3','d4','P','Q'];
+    $('#ec-shards').innerHTML=names.map(n=>'<span class="tok '+(lost.includes(n)?'bad':'ok')+'">'+(lost.includes(n)?'✗ ':'')+n+'</span>').join(''); }
+  paint([]);
+  let seed=3; function rnd(){ seed|=0; seed=seed+0x6D2B79F5|0; let t=Math.imul(seed^seed>>>15,1|seed); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }
+  $('#ec-lose').onclick=()=>{ const names=['d1','d2','d3','d4','P','Q']; const a=Math.floor(rnd()*6); let b=Math.floor(rnd()*6); if(b===a)b=(b+1)%6;
+    paint([names[a],names[b]]);
+    verdict('#ec-verdict','#ec-vtext','ok','Lost {'+names[a]+', '+names[b]+'} → <b>reconstructed byte-identically</b> from the surviving 4 (all 15 possible 2-losses verify). 1.5× the bytes for the same 2-loss tolerance as 3× replication.'); };
+  $('#ec-lose3').onclick=()=>{ paint(['d1','d3','Q']);
+    verdict('#ec-verdict','#ec-vtext','bad','Three shards gone with only m=2 parity → <b>unrecoverable</b>. m sets the tolerance exactly — pick it from your failure-domain math (phase 3).'); };
+})();
+
+/* ══ 5 · CAS ══ */
+(function(){
+  $('#ca-up').onclick=()=>{ $('#ca-blobs').textContent='1'; $('#ca-ref').textContent='1,000'; $('#ca-saved').textContent='2,381.8 MB (99.9%)'; $('#ca-saved').style.color='var(--good)';
+    verdict('#ca-verdict','#ca-vtext','ok','1,000 uploads of the same bytes → the same sha-256 → <b>1 physical write</b>, 1,000 pointers, refcount 1000.'); };
+  $('#ca-flip').onclick=()=>{ verdict('#ca-verdict','#ca-vtext','bad','Read re-hashes the bytes: address <code>7b1aacd3…</code> ≠ actual <code>87b8b766…</code> → <b>CORRUPTION DETECTED</b> — repair from a replica, never serve silent bad bytes.'); };
+  $('#ca-del').onclick=()=>{ $('#ca-ref').textContent='0'; $('#ca-blobs').textContent='0';
+    verdict('#ca-verdict','#ca-vtext','ok','Deletes 1–999 only decremented the refcount (bytes freed: 0). Delete #1,000 hit <b>refcount 0 → the blob is actually reclaimed</b>. CAS deletion is garbage collection.'); };
+})();
+
+/* ══ 6 · DELETION ══ */
+(function(){
+  let logs=[], state='live';
+  function paint(msg,kind){ $('#dg-log').innerHTML=logs.length?logs.join('<br>'):'—'; verdict('#dg-verdict','#dg-vtext',kind,msg); }
+  $('#dg-del').onclick=()=>{ state='tomb'; logs.unshift('DELETE v1.mp4 → <b>tombstone</b> written (1 row, ~2 ms) · GET → 404 · disk usage unchanged: 83 MB');
+    logs.unshift('(contrast: sync fan-out to 6 locations took 2,889 ms and replica-3 TIMED OUT → half-deleted)');
+    paint('User sees 404 <b>immediately</b>; the bytes wait for GC. One atomic row beats a 6-way fan-out that can half-fail.','ok'); };
+  $('#dg-undo').onclick=()=>{ if(state!=='tomb'){ paint('Delete first.','warn'); return; } state='live';
+    logs.unshift('day 3: UNDELETE → tombstone cleared → GET 200 OK (still inside the 7-day grace window)');
+    paint('Undelete is free inside the grace window — the bytes were never touched.','ok'); };
+  $('#dg-gc').onclick=()=>{ if(state==='live'){ paint('Nothing tombstoned — delete first (and skip the undelete).','warn'); return; }
+    logs.unshift('day 10: GC frees tombstoned bytes → compact container-A: 40.1 MB → <b>11.4 MB</b> (71% dead space dropped) · bucket 83 → 54.4 MB');
+    paint('GC + compaction reclaimed the space asynchronously — deletion completed days after the user clicked. That is the design, not a bug.','ok'); };
+  $('#dg-reset').onclick=()=>{ logs=[]; state='live'; paint('Bucket holds 83 MB across 2 container files.','warn'); };
+})();
+
+/* ══ 7 · HOT PARTITION ══ */
+(function(){
+  let mode='ts';
+  [['hp-ts','ts'],['hp-hash','hash']].forEach(([id,m])=>{ $('#'+id).onclick=()=>{ mode=m; $('#hp-ts').classList.toggle('sel',m==='ts'); $('#hp-hash').classList.toggle('sel',m==='hash'); }; });
+  $('#hp-run').onclick=()=>{
+    if(mode==='ts'){ $('#hp-ok').textContent='3,500'; $('#hp-503').textContent='8,500';
+      verdict('#hp-verdict','#hp-vtext','bad','Every key starts <code>logs/2026-08-17</code> → ONE partition (cap 3,500/s) carries all 12,000 → <b>71% rejected</b> with 503 SlowDown.'); }
+    else { $('#hp-ok').textContent='12,000'; $('#hp-503').textContent='0';
+      verdict('#hp-verdict','#hp-vtext','ok','<code>logs/&lt;hash%16&gt;/…</code> spreads the same 12,000 across 16 partitions (~750 each) → <b>zero throttling</b>. Key naming IS load distribution.'); }
+  };
+})();
+
+/* ══ 8 · CDN ══ */
+(function(){
+  let inv='purge';
+  [['cd-purge','purge'],['cd-ver','ver']].forEach(([id,m])=>{ $('#'+id).onclick=()=>{ inv=m; $('#cd-purge').classList.toggle('sel',m==='purge'); $('#cd-ver').classList.toggle('sel',m==='ver'); }; });
+  $('#cd-run').onclick=()=>{
+    const cdn=$('#cd-on').checked;
+    if(!cdn){ $('#cd-lat').textContent='205 ms'; $('#cd-lat').style.color='var(--bad)'; $('#cd-eg').textContent='88.6 GB'; $('#cd-stale').textContent='—';
+      verdict('#cd-verdict','#cd-vtext','bad','Every read crosses the ocean to origin: ap-south p50 <b>205 ms</b>, 88.6 GB of origin egress for 3,000 reads. At 1 PB/mo that bill is <b>$94k</b>.'); return; }
+    $('#cd-lat').textContent='16.5 ms'; $('#cd-lat').style.color='var(--good)'; $('#cd-eg').textContent='0.30 GB';
+    const stale = inv==='purge' ? '3 / 13' : '0 / 13';
+    $('#cd-stale').textContent=stale; $('#cd-stale').style.color = inv==='purge'?'var(--bad)':'var(--good)';
+    if(inv==='purge') verdict('#cd-verdict','#cd-vtext','warn','99.5% edge-hit, origin egress collapsed 293×. But the deploy purged by path — <b>3 stale reads</b> slipped through while the purge propagated PoP by PoP.');
+    else verdict('#cd-verdict','#cd-vtext','ok','99.5% edge-hit AND a clean deploy: the new content shipped under a <b>new versioned URL</b> — zero stale reads, zero purge ops; the old name just ages out. 1 PB/mo at 90% hit: <b>$51k vs $94k</b>.');
+  };
+})();
+fromHash();
+</script>
+</body>
+</html>
