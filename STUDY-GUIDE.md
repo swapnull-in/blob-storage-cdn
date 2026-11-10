@@ -17,7 +17,7 @@
 
 ## Go deeper
 
-- **Deep Dives/18-pattern-large-blobs.md** — the whole pattern on one page, with the probe-and-answer table to recite before interviews.
-- **Core Course/21-build-from-scratch.md §6 (blob store)** — the blind-rep target: rebuild S3 from a blank page, then diff yourself against it.
-- **Core Course/03-caching.md — CDN section** — stampede protection, global invalidation, and egress economics in full depth (the apple-note says do this first).
+- **[Deep Dives/18-pattern-large-blobs.md](https://github.com/swapnull-in/system-design/blob/main/Deep%20Dives/18-pattern-large-blobs.md)** — the whole pattern on one page, with the probe-and-answer table to recite before interviews.
+- **[Core Course/21-build-from-scratch.md](https://github.com/swapnull-in/system-design/blob/main/Core%20Course/21-build-from-scratch.md) §6 (blob store)** — the blind-rep target: rebuild S3 from a blank page, then diff yourself against it.
+- **[Core Course/03-caching.md](https://github.com/swapnull-in/system-design/blob/main/Core%20Course/03-caching.md) — CDN section** — stampede protection, global invalidation, and egress economics in full depth (the apple-note says do this first).
 - **DDIA — 04-storage-and-retrieval** — what happens below the object API: LSM-trees, compaction, and why append-only + GC keeps reappearing at every layer.
